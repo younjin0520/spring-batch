@@ -19,7 +19,7 @@ public class MultiStepBatchJob {
     private final StepBuilderFactory stepBuilderFactory;
 
     @Bean
-    public Job ExampleJob(){
+    public Job MultiStepJob(){
         return jobBuilderFactory.get("multiStepJob")
                 .start(startStep())
                 .next(nextStep())
