@@ -22,19 +22,21 @@ public class StepTestBatchJob {
     private final JobBuilderFactory jobBuilderFactory;
     private final StepBuilderFactory stepBuilderFactory;
 
-//    @Bean
-//    public Job startLimitJob() {
-//        return jobBuilderFactory.get("startLimitJob")
-//                .start(startLimitStep())
-//                .build();
-//    }
-
     @Bean
-    public Job skipJob() {
-        return jobBuilderFactory.get("skipJob")
-                .start(skipStep())
+    public Job startLimitJob() {
+        return jobBuilderFactory.get("startLimitJob")
+                .start(startLimitStep())
                 .build();
     }
+
+    @Bean
+    public Job skipRetryJob() {
+        return jobBuilderFactory.get("skipJob")
+                //.start(skipStep())
+                .start(retryStep())
+                .build();
+    }
+
     /**
      * StartLimit : 재시작 횟수 제한
      * 외부와의 통신, DB 작업 중 연결이 끊기면서 작업이 실패하는 경우, 배치를 재시작 해야함
@@ -43,18 +45,18 @@ public class StepTestBatchJob {
      * -> 지정 횟수를 초과하면 Exception 발생
      */
 
-//    @Bean
-//    @JobScope
-//    public Step startLimitStep() {
-//        return stepBuilderFactory.get("startLimitStep")
-//                .startLimit(3)  // 재시작 3번 가능
-//                .tasklet((contribution, chunkContext) -> {
-//                    log.info(">>>> This is SimpleStep1");
-//                    int error = 5/0;    // 에러 발생 코드
-//                    return RepeatStatus.FINISHED;
-//                })
-//                .build();
-//    }
+    @Bean
+    @JobScope
+    public Step startLimitStep() {
+        return stepBuilderFactory.get("startLimitStep")
+                .startLimit(3)  // 재시작 3번 가능
+                .tasklet((contribution, chunkContext) -> {
+                    log.info(">>>> This is SimpleStep1");
+                    int error = 5/0;    // 에러 발생 코드
+                    return RepeatStatus.FINISHED;
+                })
+                .build();
+    }
 
     /* Skip: 데이터를 처리하는 동안 설정된 Exception이 발생한 경우, 해당 데이터 처리를 건너뛰는 기능 */
     @Bean
@@ -73,6 +75,19 @@ public class StepTestBatchJob {
     }
 
     @Bean
+    public Step retryStep() {
+        return stepBuilderFactory.get("retryStep")
+                .<String, String>chunk(5)
+                .reader(reader())
+                .processor(processor())
+                .writer(writer())
+                .faultTolerant()
+                .retry(SQLException.class)
+                .retryLimit(2)
+                .build();
+    }
+
+    @Bean
     public ItemReader<String> reader() {
         //데이터를 불러오는 로직을 작성
         return new ItemReader<String>() {
@@ -84,14 +99,14 @@ public class StepTestBatchJob {
                 i++;
 
                 //skipLimit(2)이므로 아래 예외들은 모두 skip됨
-                if (i == 2) {
-                    log.error("ItemReader ArithmeticException 발생");
-                    throw new ArithmeticException("에러 발생");
-                }
-                if (i == 4) {
-                    log.error("ItemReader SQLException 발생");
-                    throw new SQLException("에러 발생");
-                }
+//                if (i == 2) {
+//                    log.error("ItemReader ArithmeticException 발생");
+//                    throw new ArithmeticException("에러 발생");
+//                }
+//                if (i == 4) {
+//                    log.error("ItemReader SQLException 발생");
+//                    throw new SQLException("에러 발생");
+//                }
                 log.info("itemReader >>> " + i);
                 return i > 20 ? null : String.valueOf(i);
             }
@@ -104,8 +119,9 @@ public class StepTestBatchJob {
         return item -> {
             log.info("itemProcessor >>> " + item);
 
-            // 에러 발생 시, chunk의 첫 단계(1부터)로 돌아가 itemReader로부터 다시 데이터를 전달받음
+            // [SKIP]에러 발생 시, chunk의 첫 단계(1부터)로 돌아가 itemReader로부터 다시 데이터를 전달받음
             // => 이미 에러가 발생한 item은 skip하고 넘어감
+            // [RETRY] 예외 발생 시 재시도 됨
             if(item.equals("3")){
                 log.error("ItemProcessor 에러 발생");
                 throw new SQLException();
