@@ -136,7 +136,8 @@ public class StepTestBatchJob {
         return items -> {
             for (String item : items) {
                 if(item.equals("3")) {
-                    // 예외 발생 skip후에는 item을 리스트가 아니라 하나씩 받아옴 (처음에는 리스트로 받음)
+                    // [skip] 예외 발생 후 item을 리스트가 아니라 하나씩 받아옴 (처음에는 리스트로 받음)
+                    // [retry] 예외 발생 후 item을 리스트로 처리
                     log.error("ItemWriter 에러 발생");
                     throw new SQLException();
                 }
